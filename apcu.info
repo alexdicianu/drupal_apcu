@@ -1,0 +1,4 @@
+name = "APCu cache"
+description = "Provides an alternative caching backend using PHP APCu"
+package = Performance
+core = 7.x

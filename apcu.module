@@ -1,0 +1,100 @@
+<?php
+
+/**
+ * Defines a default cache implementation.
+ *
+ * This cache is based on local APCu data stores and the database. 
+ * Every time a cache item gets updated, we write it to the local cache and the DB.
+ */
+class ApcuCache extends DrupalDatabaseCache implements DrupalCacheInterface {
+  protected $bin;
+
+  /**
+   * Constructs a DrupalDatabaseCache object.
+   *
+   * @param $bin
+   *   The cache bin for which the object is created.
+   */
+  public function __construct($bin) {
+    parent::__construct($bin);
+  }
+
+  /**
+   * Implements DrupalCacheInterface::get().
+   */
+  public function get($cid) {
+    $cids = array($cid);
+    $cache = $this->getMultiple($cids);
+    return $cache[$cid];
+  }
+
+  /**
+   * Implements DrupalCacheInterface::getMultiple().
+   */
+  public function getMultiple(&$cids) {
+    if (empty($cids)) return;
+
+    $cache = array();
+
+    $results = apcu_fetch($cids);
+
+    // If local cache is empty, get it from the DB.
+    if (empty($results)) {
+      $results = parent::getMultiple($cids);
+    }
+
+    foreach ($results as $key => $item) {
+      $cache[$key] = $this->_prepareItem($item);
+    }
+    
+    return $cache;
+  }
+
+  /**
+   * Implements DrupalCacheInterface::set().
+   */
+  public function set($cid, $data, $expire = CACHE_PERMANENT) {
+    $cache_data = array(
+      'serialized' => 1,
+      'created' => REQUEST_TIME,
+      'expire' => $expire,
+    );
+
+    if (!is_string($data)) {
+      $cache_data['data'] = serialize($data);
+      $cache_data['serialized'] = 1;
+    }
+    else {
+      $cache_data['data'] = $data; 
+      $cache_data['serialized'] = 0;
+    }
+
+    // Store the data to the local cache;
+    apcu_store($cid, $cache_data, $expire);
+
+    // Store the data in the DB as well.
+    parent::set($cid, $cache_data, $expire);
+  }
+
+  /**
+   * Implements DrupalCacheInterface::clear().
+   */
+  public function clear($cid = NULL, $wildcard = FALSE) {
+  
+  }
+
+  /**
+   * Implements DrupalCacheInterface::isEmpty().
+   */
+  public function isEmpty() {
+
+  }
+
+  protected function _prepareItem($data) {
+    $cache = array();
+
+    $cache['data'] = ($data['serialized']) ? unserialize($data['data']) : $data['data'];
+    return (object) $cache;
+  }
+
+}
