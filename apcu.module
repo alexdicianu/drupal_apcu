@@ -39,12 +39,19 @@ class ApcuCache extends DrupalDatabaseCache implements DrupalCacheInterface {
     $results = apcu_fetch($cids);
 
     // If local cache is empty, get it from the DB.
+    $store_locally = FALSE;
     if (empty($results)) {
       $results = parent::getMultiple($cids);
+      $store_locally = TRUE;
     }
 
     foreach ($results as $key => $item) {
       $cache[$key] = $this->_prepareItem($item);
+
+      // If it's not in the local storage, but is present in the DB ==> store it locally as well.
+      if ($store_locally) {
+        $this->set($key, $cache[$key]->data);
+      }
     }
     
     return $cache;
