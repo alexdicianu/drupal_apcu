@@ -25,7 +25,9 @@ class ApcuCache extends DrupalDatabaseCache implements DrupalCacheInterface {
   public function get($cid) {
     $cids = array($cid);
     $cache = $this->getMultiple($cids);
-    return $cache[$cid];
+    // check for an empty cache.
+    $return = !empty($cache[$cid]) ? $cache[$cid] : FALSE;
+    return $return;
   }
 
   /**
