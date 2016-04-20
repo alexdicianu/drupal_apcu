@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Defines a default cache implementation.
+ * Defines an APCU based cache implementation.
  *
  * This cache is based on local APCu data stores and the database. 
  * Every time a cache item gets updated, we write it to the local cache and the DB.
@@ -14,10 +14,10 @@ class ApcuCache extends DrupalDatabaseCache implements DrupalCacheInterface {
   protected $bin;
 
   /**
-   * Constructs a DrupalDatabaseCache object.
+   * Constructs an ApcuCache object.
    *
    * @param $bin
-   *   The cache bin for which the object is created.
+   *   The cache bin for which the object is created. This will be mostly for the DB cache.
    */
   public function __construct($bin) {
     parent::__construct($bin);
@@ -25,29 +25,34 @@ class ApcuCache extends DrupalDatabaseCache implements DrupalCacheInterface {
 
   /**
    * Implements DrupalCacheInterface::get().
-   * @todo
-   *   - set the cache locally if it exists in the db.
    */
   public function get($cid) {
     if (empty($cid)) return;
 
     $cache = apcu_fetch($cid);
+    //print "\n\nFrom APCu:\n";
+    //print_r($cache);
 
     // If the local storage is empty, check the DB.
     if (empty($cache)) {
       $cids = array($cid);
       $cache = parent::getMultiple($cids);
       $cache = !empty($cache[$cid]) ? $cache[$cid] : FALSE;
-      // If the db has a copy, store it locally as well.
-      //$this->setLocal($cid, $cache, $cache->expire);
+      
+      if (empty($cache)) {
+        return FALSE;
+      }
+
+      //print "\n\nFrom Database:\n";
+      //print_r($cache);
+
+      // If the DB has a copy, store it locally as well. 
+      // Future calls don't need to go to the DB.
+      $this->saveLocally($cid, $cache->data, $cache->expire);
       return $cache;
     }
 
-    // If the DB is empty return nothing.
-    if (empty($cache)) {
-      return FALSE;
-    }
-
+    // APCu returns arrays, not objects. Drupal needs objects.
     if (!is_object($cache)) {
       $cache = (object) $cache;  
     }
@@ -80,10 +85,8 @@ class ApcuCache extends DrupalDatabaseCache implements DrupalCacheInterface {
    * Implements DrupalCacheInterface::set().
    */
   public function set($cid, $data, $expire = CACHE_PERMANENT) {
-    //print "setting 1: " . $cid . "\n";
-    // APCu is a key-value store - always serialize the data.
     $cache_data = array(
-      'data' => serialize($data),
+      'serialized' => 0,
       'created' => REQUEST_TIME,
       'expire' => $expire,
     );
@@ -107,10 +110,9 @@ class ApcuCache extends DrupalDatabaseCache implements DrupalCacheInterface {
   /**
    * Sets the data only in the local store.
    */
-  public function setLocal($cid, $data, $expire = CACHE_PERMANENT) {
+  public function saveLocally($cid, $data, $expire = CACHE_PERMANENT) {
     // APCu is a key-value store - always serialize the data.
     $cache_data = array(
-      'data' => serialize($data),
       'created' => REQUEST_TIME,
       'expire' => $expire,
     );
@@ -136,12 +138,14 @@ class ApcuCache extends DrupalDatabaseCache implements DrupalCacheInterface {
    */
   public function clear($cid = NULL, $wildcard = FALSE) {
     // Delete from local storage.
-    if (!empty($cid)) {
-      apcu_delete($cid);
+    if ($wildcard || $cid == '*') {
+      //print "\n Clearing cache wilcard: $cid \n";
+      apcu_clear_cache();
     }
 
-    if ($wildcard) {
-      apcu_clear_cache();
+    if (!empty($cid) && $cid != '*') {
+      //print "\n Clearing cache $cid \n";
+      apcu_delete($cid);
     }
 
     // Clear the DB cache.
@@ -152,6 +156,10 @@ class ApcuCache extends DrupalDatabaseCache implements DrupalCacheInterface {
    * Implements DrupalCacheInterface::isEmpty().
    */
   public function isEmpty() {
-    //$cache = apcu_cache_info();
+    $cache = apcu_cache_info();
+    if (empty($cache['cache_list'])) {
+      return TRUE;
+    }
+    return FALSE;
   }
 }
