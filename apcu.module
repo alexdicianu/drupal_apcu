@@ -1,2 +1,12 @@
 <?php
 
+/**
+ * Implements hook_boot().
+ *
+ * At the beginning of each request, we need fresh copy in the local APCu cache.
+ *   - cc all would clear the DB cache, but not individual caches if the 
+ *     application is running on multiple web hosts.
+ */
+function apcu_boot() {
+  apcu_clear_cache();
+}
