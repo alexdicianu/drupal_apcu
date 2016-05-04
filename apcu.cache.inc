@@ -25,6 +25,7 @@ class ApcuCache extends DrupalDatabaseCache implements DrupalCacheInterface {
 
   /**
    * Implements DrupalCacheInterface::get().
+   * @todo: take into account individual cache expiration period.
    */
   public function get($cid) {
     if (empty($cid)) return;
